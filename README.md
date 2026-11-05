@@ -1,56 +1,93 @@
-# Chicago Crimes: Pipeline de Big Data (Medallion Architecture)
+# Chicago Crimes — Big Data Pipeline
 
-> Pipeline Spark + HDFS que recolhe mais de 1 milhão de ocorrências criminais de Chicago (2022–2026) e as organiza em camadas Bronze, Silver e Gold para análise.
+An end-to-end batch data pipeline that processes Chicago crime records using **Apache Spark and HDFS**, following a Medallion-style architecture (Bronze, Silver, Gold).
 
-**Mestrado em Business Intelligence & Analytics (ISCAP)**, cadeira de Analítica para Big Data, 2025/26
+**Academic context:** MSc in Business Intelligence & Analytics, ISCAP (2025/26)  
+**Author:** João Coelho
 
-## O problema
-Que padrões de criminalidade aparecem quando se tratam, de forma sistemática, **1.077.035 ocorrências** de uma cidade como Chicago? Onde e a que horas acontecem os crimes, que tipos dominam e como evoluíram ao longo de quatro anos?
+## Project overview
 
-## Arquitetura
+This project explores more than **one million crime records** from the City of Chicago's public data portal, covering records from 2022 onward in the project snapshot. The goal is to turn raw API data into structured, analysis-ready datasets and reusable aggregations.
 
-```
-API Socrata (JSON, 50k registos/pedido)
-        │  ingestão com paginação por offset
-        ▼
- BRONZE  JSON Lines, em bruto, particionado por ano   (ingest_bronze.py)
-        ▼
- SILVER  limpeza e tipagem, Parquet + Snappy          (silver.py)
-        ▼
- GOLD    agregações analíticas                        (gold.py)
-        ▼
- Visualizações (PySpark + seaborn)                    (notebooks/gold_visualizacoes.ipynb)
-```
+## Architecture
 
-Também há uma **atualização incremental** (`*_incremental.py`, `gold_update.py`, `update_pipeline.py`), que só processa registos novos desde a última execução.
-
-## Principais conclusões
-- A criminalidade é **maioritariamente diurna**, não noturna.
-- **Março e abril** têm mais crimes do que julho.
-- A diferença entre dias da semana é quase nula.
-- Guardar em Parquet com Snappy e particionar por ano torna as consultas muito mais rápidas do que sobre o JSON original.
-
-## Stack
-`PySpark` · `HDFS` · `Parquet` · `Python (requests)` · `matplotlib` / `seaborn` · `spark-submit`
-
-## Estrutura
-```
-src/        scripts do pipeline (ingestão, silver, gold, incremental)
-notebooks/  15 visualizações sobre a camada Gold
-docs/       relatório completo (PDF)
+```text
+Chicago Open Data API
+        |
+        v
+BRONZE — raw JSON Lines, partitioned by year
+        |
+        v
+SILVER — cleaned and typed data, stored as Parquet
+        |
+        v
+GOLD — analytical aggregations for reporting
 ```
 
-## Como correr
+### Processing stages
+
+- **Bronze ingestion:** paginated API extraction, grouped by year and stored in HDFS.
+- **Silver transformation:** column selection and renaming, type conversion, timestamp parsing, derived time attributes, null handling, and Parquet output partitioned by year.
+- **Gold analytics:** aggregated datasets covering crime type, district, hour, weekday, month, community area, location, domestic incidents, and arrest rates.
+- **Incremental processing:** separate scripts support ingestion and transformation of newly available records.
+
+## Technology stack
+
+- Python and Requests
+- Apache Spark / PySpark
+- HDFS
+- JSON Lines and Apache Parquet (Snappy)
+- Matplotlib and Seaborn for exploratory visualizations
+
+## Repository structure
+
+```text
+.
+├── src/
+│   ├── chicago_crimes.py
+│   ├── ingest_bronze.py
+│   ├── ingest_bronze_incremental.py
+│   ├── silver.py
+│   ├── silver_incremental.py
+│   ├── gold.py
+│   ├── gold_update.py
+│   └── update_pipeline.py
+├── notebooks/
+│   └── gold_visualizacoes.ipynb
+└── docs/
+    └── project report
+```
+
+## Data source
+
+The pipeline uses the [City of Chicago Crimes dataset](https://data.cityofchicago.org/resource/ijzp-q8t2.json). The source is maintained by the City of Chicago and may change over time.
+
+## Running the pipeline
+
+The scripts expect a working Spark and HDFS environment. Configure the HDFS destination before running:
+
 ```bash
-export HDFS_ROOT="hdfs://<host>:<porta>/<utilizador>"
-python src/chicago_crimes.py                # descarrega os dados da API
+export HDFS_ROOT="hdfs://<host>:<port>/<user>"
+python src/chicago_crimes.py
 spark-submit src/ingest_bronze.py
 spark-submit src/silver.py
 spark-submit src/gold.py
-# atualizações seguintes:
-python src/update_pipeline.py
 ```
-Dados: [City of Chicago Open Data – Crimes 2001 to Present](https://data.cityofchicago.org/resource/ijzp-q8t2.json)
 
-## Autor
-João Coelho
+For subsequent updates, use the incremental scripts and the orchestration entry point in `src/update_pipeline.py`.
+
+## Analytical questions
+
+The Gold layer is designed to support questions such as:
+
+- How does recorded crime volume vary by year and crime category?
+- Which districts and community areas have the highest record counts?
+- At what hours and on which weekdays are incidents most frequently recorded?
+- How do arrest rates differ across crime categories and districts?
+
+## Scope and limitations
+
+- The analysis covers the date range and records retrieved at the time of execution; the public dataset is updated continuously.
+- Missing geographic fields are excluded in the current Silver transformation, which can affect geographic summaries.
+- Aggregated counts describe recorded incidents and should not be interpreted as a complete measure of crime prevalence.
+- Re-running the pipeline requires compatible Spark/HDFS infrastructure and access to the public API.
